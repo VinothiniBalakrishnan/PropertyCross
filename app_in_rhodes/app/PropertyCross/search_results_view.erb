@@ -6,7 +6,7 @@
   </div>
 
   <div data-role="content" data-theme="c">
-    <ul data-role="listview" data-split-icon="arrow-r" data-split-theme="d" style='margin:0px;' id="search_view_results">
+    <ul data-role="listview" data-split-icon="arrow-r" data-split-theme="d" id="search_view_results" data-inset="true">
       <% @listings.each do |list| %>
         <li>
           <a href="<%= url_for :action => :property_view, :controller => :PropertyCross, :query => {:object => list.object} %>">
