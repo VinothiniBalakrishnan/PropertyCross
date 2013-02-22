@@ -1,5 +1,5 @@
 module PropertycrossHelper
-  def misspelt_location(locations)
+  def misspelled_location(locations)
     missplet_location_info = "<div><h4>Please select a location below:</h4></div>"
     missplet_location_info+="<ul data-role=listview data-inset=true style=margin:0px; >"+li_formation(locations)+"</ul>"
     missplet_location_info
@@ -13,7 +13,7 @@ module PropertycrossHelper
     li_formation
   end
 
-  def recent_search(recent_search_result)
+  def get_recent_search_html(recent_search_result)
     recent_search_info = "<div> <h4> Recent Searches </h4></div>"
     recent_search_info+="<ul data-role=listview data-inset=true style=margin:0px; >"+recent_search_li_formation(recent_search_result)+"</ul>"
     recent_search_info
