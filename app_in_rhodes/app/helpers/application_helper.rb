@@ -150,4 +150,23 @@ module ApplicationHelper
     end
   end
 
+  def success?(status)
+    status  == "ok"
+  end
+
+  def valid_search_response?(code)
+    valid_search_codes = ["100", "101"]
+    valid_search_codes.include?(code)
+  end
+
+  def unknown_internal_error?(code)
+    unknown_internal_error_code = ["201", "500"]
+    unknown_internal_error_code.include?(code)
+  end
+
+  def ambiguous_misspelled_location?(code)
+    ambiguous_misspelled_location_code = ["200", "202"]
+    ambiguous_misspelled_location_code.include?(code)
+  end
+
 end
