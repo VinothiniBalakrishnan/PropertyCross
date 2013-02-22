@@ -10,14 +10,14 @@ class PropertyCrossController < Rho::RhoController
   def search_listings
     if has_network?
       place_name = @params['place_name']
-      url =  "http://api.nestoria.co.uk/api?country=uk&pretty=1&action=search_listings&place_name=#{place_name}&page=1&encoding=json&listing_type=buy"
-      result = Rho::AsyncHttp.get(:url => url)
+      search_property_url =  Rho::RhoConfig.BASE_URL + "?country=uk&pretty=1&action=search_listings&place_name=#{place_name}&page=1&encoding=json&listing_type=buy"
+      result = Rho::AsyncHttp.get(:url => search_property_url)
       application_response_code = result["body"]["response"]["application_response_code"]
-      if result['status'] == "ok"
+      if success?(result['status'])
         decide_redirection(application_response_code, result, place_name)
       end
     else
-      WebView.execute_js("error_message('An error occurred while searching. Please check your network connection and try again.');")
+      WebView.execute_js("showError('An error occurred while searching. Please check your network connection and try again.');")
     end
   end
 
@@ -27,16 +27,14 @@ class PropertyCrossController < Rho::RhoController
 
   def property_view
     @property_detail = PropertyCross.find(:all, :conditions => {"object"=>  @params['object']}).first
-    if @property_detail == nil
-      @property_detail = PropertyCross.find(:all, :conditions => {"guid"=>  @params['object']}).first
-    end
-    @favourite = Favourite.find(:all, :conditions => {"guid"=>  @property_detail.guid})
+    @property_detail = PropertyCross.find(:all, :conditions => {"guid"=>  @params['object']}).first if @property_detail.nil?
+    @favourite = Favourite.find_all_by_guid(@property_detail.guid)
   end
 
   def add_to_favourite
     property =  PropertyCross.find(:all, :conditions => {"object"=>  @params['object']})
     property.each do |property|
-      favourite = Favourite.find(:all, :conditions => {"guid"=>  property.guid})
+      favourite = Favourite.find_all_by_guid(property.guid)
       create_favourite_property(favourite.size, property)
     end
   end
@@ -46,8 +44,8 @@ class PropertyCrossController < Rho::RhoController
   end
 
   def favourite_property_view
-    @favourite = Favourite.find(:all, :conditions => {"guid"=> @params['guid']})
-    @property_detail = Favourite.find(:all, :conditions => {"guid"=> @params['guid']}).first
+    @favourite = Favourite.find_all_by_guid(@params["guid"])
+    @property_detail = @favourite.first
   end
 
   def remove_from_favourite
@@ -55,54 +53,53 @@ class PropertyCrossController < Rho::RhoController
   end
 
   def recent_search_list
-    recent_search = RecentSearch.find(:all)
-    if recent_search.size > 0
-      recent_search_list = recent_search(recent_search.reverse)
-      WebView.execute_js("recent_search('#{recent_search_list}')")
+    recent_search_result = RecentSearch.find(:all)
+    if recent_search_result.size > 0
+      recent_search_html = get_recent_search_html(recent_search_result.reverse)
+      WebView.execute_js("fillRecentSearch('#{recent_search_html}')")
     end
   end
 
   def get_my_location
-    GeoLocation.set_notification("/app/PropertyCross/get_my_location_callback_url", "")
+    GeoLocation.set_notification("/app/PropertyCross/get_my_location_callback", "")
   end
 
-  def get_my_location_callback_url
-    if @params['status'] == "ok"
+  def get_my_location_callback
+    if success?(@params['status'])
       GeoLocation.turnoff
-      WebView.execute_js("my_location('#{@params['latitude']},#{ @params['longitude']}')")
+      WebView.execute_js("showMyLocation('#{@params['latitude']},#{ @params['longitude']}')")
     end
   end
 
   def my_location_result
     if has_network?
-      url =  "http://api.nestoria.in/api?country=uk&pretty=1&action=search_listings&encoding=json&listing_type=buy&page=1&centre_point=#{@params['place_name']}"
-      result = Rho::AsyncHttp.get(:url => url)
+      search_by_place_url =  Rho::RhoConfig.BASE_URL + "?country=uk&pretty=1&action=search_listings&encoding=json&listing_type=buy&page=1&centre_point=#{@params['place_name']}"
+      result = Rho::AsyncHttp.get(:url => search_by_place_url)
       application_response_code = result["body"]["response"]["application_response_code"]
-      if result['status'] == "ok"
+      if success?(result['status'])
         decide_redirection(application_response_code, result, @params['place_name'])
       end
     else
-      WebView.execute_js("error_message('An error occurred while searching. Please check your network connection and try again.');")
+      WebView.execute_js("showError('An error occurred while searching. Please check your network connection and try again.');")
     end
   end
 
   def more_search_result
     if has_network?
       place_name = @params['place_name']
+      base_url  = Rho::RhoConfig.BASE_URL + "?country=uk&pretty=1&action=search_listings&encoding=json&listing_type=buy&page=#{@params['page']}"
       if  place_name.start_with?("coord")
-        url = "http://api.nestoria.in/api?country=uk&pretty=1&action=search_listings&encoding=json&listing_type=buy&page=#{@params['page']}&centre_point=#{Rho::RhoSupport.url_encode(place_name[6..-1])}"
+        search_url = base_url + "&centre_point=#{Rho::RhoSupport.url_encode(place_name[6..-1])}"
       else
-        url = "http://api.nestoria.co.uk/api?country=uk&pretty=1&action=search_listings&encoding=json&listing_type=buy&page=#{@params['page']}&place_name=#{place_name}"
+        search_url =  base_url + "&place_name=#{place_name}"
       end
-      result = Rho::AsyncHttp.get(:url => url)
+      result = Rho::AsyncHttp.get(:url => search_url)
       application_response_code = result["body"]["response"]["application_response_code"]
-      if result['status'] == "ok"
-        if application_response_code == "100" || application_response_code == "101"
-          listings = result["body"]["response"]["listings"]
-          create_property_cross(listings)
-          search_result = more_search_result_design(result["body"]["response"]["listings"])
-          WebView.execute_js("more_search_result('#{search_result}');")
-        end
+      if success?(result['status'])  &&  valid_search_response?(application_response_code)
+        property_list = result["body"]["response"]["listings"]
+        create_property_cross(property_list)
+        search_result = more_search_result_design(result["body"]["response"]["listings"])
+        WebView.execute_js("showMoreSearchResult('#{search_result}');")
       end
     end
   end
@@ -110,14 +107,14 @@ class PropertyCrossController < Rho::RhoController
   private
 
   def decide_redirection(application_response_code, result, place_name)
-    if application_response_code == "100" || application_response_code == "101"
+    if valid_search_response?(application_response_code)
       listings = result["body"]["response"]["listings"]
       handle_correct_search_result(listings, result, place_name)
-    elsif  application_response_code == "201" || application_response_code == "500"
-      WebView.execute_js("error_message('The location given was not recognised.');")
-    elsif application_response_code == "202" || application_response_code == "200"
-      missplet_location_info = misspelt_location(result["body"]["response"] ["locations"])
-      WebView.execute_js("misspelt_location('#{missplet_location_info}')")
+    elsif unknown_internal_error?(application_response_code)
+      WebView.execute_js("showError('The location given was not recognised.');")
+    elsif ambiguous_misspelled_location?(application_response_code)
+      missplet_location_info = misspelled_location(result["body"]["response"] ["locations"])
+      WebView.execute_js("misspelledLocation('#{missplet_location_info}')")
     end
   end
 
@@ -131,14 +128,12 @@ class PropertyCrossController < Rho::RhoController
       handle_recent_search(place_name, total_number_of_property)
       WebView.navigate(url_for(:action => :search_results_view, :controller => :PropertyCross, :query => {:location => location, :total_results => total_number_of_property}))
     else
-      WebView.execute_js("error_message('There were no properties found for the given location.');")
+      WebView.execute_js("showError('There were no properties found for the given location.');")
     end
   end
 
-  def create_property_cross(listings)
-    listings.each do |list|
-      PropertyCross.create(list)
-    end
+  def create_property_cross(property_list)
+    property_list.each { |property|    PropertyCross.create(property) }
   end
 
   def handle_recent_search(place_name, count)
@@ -151,17 +146,12 @@ class PropertyCrossController < Rho::RhoController
   end
 
   def destroy_recent_search_list
-    recent_search_all = RecentSearch.find(:all)
-    if recent_search_all.size > 4
-      recent_search_name =  RecentSearch.find(:all).first
-      recent_search_name.destroy
-    end
+    recent_searchs = RecentSearch.find(:all)
+    recent_searchs.first.destroy if recent_searchs.size > 4
   end
 
   def create_favourite_property(favourite_size, property)
-    if favourite_size == 0
-      Favourite.create(property.vars.reject! {|k, v|  [:source_id, :object].include? k })
-    end
+    Favourite.create(property.vars.reject! {|k, v|  [:source_id, :object].include? k }) if favourite_size == 0
   end
 
 end
